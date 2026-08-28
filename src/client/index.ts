@@ -4,19 +4,21 @@ import {
   commandStatus,
   printClientHelp,
 } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
-import { ExchangePerilDirect, PauseKey } from "../internal/routing/routing.js";
+import { declareAndBind, SimpleQueueType, subscribeJSON } from "../internal/pubsub/consume.js";
+import { ExchangePerilDirect, ExchangePerilTopic, PauseKey } from "../internal/routing/routing.js";
 import { GameState } from "../internal/gamelogic/gamestate.js";
 import { getInput } from "../internal/gamelogic/gamelogic.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
+import { handlerPause, handlerMove } from "./handlers.js";
+import { publishJSON } from "../internal/pubsub/publish.js";
 
 async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
   const conn = await amqb.connect(connStr);
   const ch = await conn.createConfirmChannel();
   const username = await clientWelcome();
-  const queue = await declareAndBind(
+  const pauseQueue = await declareAndBind(
     conn,
     ExchangePerilDirect,
     "pause" + "." + username,
@@ -24,6 +26,23 @@ async function main() {
     SimpleQueueType.Transient,
   );
   const state = new GameState(username);
+  await subscribeJSON(
+    conn, 
+    ExchangePerilDirect, 
+    PauseKey + '.' + username, 
+    PauseKey, 
+    SimpleQueueType.Transient, 
+    handlerPause(state)
+  );
+  await subscribeJSON(
+    conn,
+    ExchangePerilTopic,
+    `army_moves.${username}`,
+    `army_moves.*`,
+    SimpleQueueType.Transient,
+    handlerMove(state),
+  );
+
   console.log("Starting Peril client...");
   while (true) {
     const input = await getInput();
@@ -38,8 +57,9 @@ async function main() {
       }
     } else if (input[0] === "move") {
       try {
-        commandMove(state, input);
-        console.log("Moved successfuly");
+        const move = commandMove(state, input);
+        await publishJSON(ch, ExchangePerilTopic, `army_moves.${username}`, move);
+        console.log("Moved published successfuly");
       } catch (error) {
         throw error;
       }

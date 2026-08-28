@@ -6,7 +6,6 @@ import {
   GameLogSlug,
 } from "../internal/routing/routing.js";
 import { PauseKey } from "../internal/routing/routing.js";
-import type { PlayingState } from "../internal/gamelogic/gamestate.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
 import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
 
