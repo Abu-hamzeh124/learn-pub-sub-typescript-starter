@@ -10,7 +10,7 @@ import { GameState } from "../internal/gamelogic/gamestate.js";
 import { getInput } from "../internal/gamelogic/gamelogic.js";
 import { commandSpawn } from "../internal/gamelogic/spawn.js";
 import { commandMove } from "../internal/gamelogic/move.js";
-import { handlerPause, handlerMove } from "./handlers.js";
+import { handlerPause, handlerMove, handlerWar } from "./handlers.js";
 import { publishJSON } from "../internal/pubsub/publish.js";
 
 async function main() {
@@ -34,14 +34,24 @@ async function main() {
     SimpleQueueType.Transient, 
     handlerPause(state)
   );
+
   await subscribeJSON(
     conn,
     ExchangePerilTopic,
     `army_moves.${username}`,
     `army_moves.*`,
     SimpleQueueType.Transient,
-    handlerMove(state),
+    handlerMove(state, ch),
   );
+
+  await subscribeJSON(
+    conn,
+    ExchangePerilTopic,
+    `war.${username}`,
+    `war.*`,
+    SimpleQueueType.Durable,
+    handlerWar(state),
+  );  
 
   console.log("Starting Peril client...");
   while (true) {

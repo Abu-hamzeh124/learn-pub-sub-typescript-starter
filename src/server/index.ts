@@ -13,7 +13,7 @@ async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
   const conn = await amqp.connect(connStr);
   const ch = await conn.createConfirmChannel();
-  const gameLogs = await declareAndBind(
+  await declareAndBind(
     conn,
     ExchangePerilTopic,
     GameLogSlug,

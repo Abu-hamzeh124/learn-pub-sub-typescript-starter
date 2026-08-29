@@ -25,6 +25,7 @@ export async function declareAndBind(
     durable: queueType === SimpleQueueType.Durable,
     autoDelete: queueType === SimpleQueueType.Transient,
     exclusive: queueType === SimpleQueueType.Transient,
+    arguments: {"x-dead-letter-exchange": "peril_dlx"},
   });
   await ch.bindQueue(queueName, exchange, key);
   return [ch, queue];
@@ -36,10 +37,10 @@ export async function subscribeJSON<T>(
   queueName: string,
   key: string,
   queueType: SimpleQueueType,
-  handler: (data: T) => AckType,
+  handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
   const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
-  ch.consume(queue.queue, (message: amqp.ConsumeMessage | null) => {
+  await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
     if (!message) return;
     const parsedMessage = JSON.parse(message.content.toString('utf-8'));
     const ack = handler(parsedMessage);
