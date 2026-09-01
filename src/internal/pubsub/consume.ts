@@ -1,3 +1,4 @@
+import { decode } from "@msgpack/msgpack";
 import amqp from "amqplib";
 import type { Channel } from "amqplib";
 
@@ -25,7 +26,7 @@ export async function declareAndBind(
     durable: queueType === SimpleQueueType.Durable,
     autoDelete: queueType === SimpleQueueType.Transient,
     exclusive: queueType === SimpleQueueType.Transient,
-    arguments: {"x-dead-letter-exchange": "peril_dlx"},
+    arguments: { "x-dead-letter-exchange": "peril_dlx" },
   });
   await ch.bindQueue(queueName, exchange, key);
   return [ch, queue];
@@ -39,14 +40,54 @@ export async function subscribeJSON<T>(
   queueType: SimpleQueueType,
   handler: (data: T) => Promise<AckType> | AckType,
 ): Promise<void> {
-  const [ch, queue] = await declareAndBind(conn, exchange, queueName, key, queueType);
+  const [ch, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType,
+  );
+  await ch.prefetch(10);
   await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
     if (!message) return;
-    const parsedMessage = JSON.parse(message.content.toString('utf-8'));
-    const ack = handler(parsedMessage);
+    const parsedMessage = JSON.parse(message.content.toString("utf-8"));
+    const ack = await handler(parsedMessage);
     if (ack === AckType.Ack) {
       ch.ack(message);
-      console.log("ack")
+      console.log("ack");
+    } else if (ack === AckType.NackRequeue) {
+      ch.nack(message, false, true);
+      console.log("requeue");
+    } else {
+      ch.nack(message, false, false);
+      console.log("discard");
+    }
+  });
+}
+
+export async function subscribeMsgPack<T>(
+  conn: amqp.ChannelModel,
+  exchange: string,
+  queueName: string,
+  key: string,
+  queueType: SimpleQueueType,
+  handler: (data: T) => Promise<AckType> | AckType,
+): Promise<void> {
+  const [ch, queue] = await declareAndBind(
+    conn,
+    exchange,
+    queueName,
+    key,
+    queueType,
+  );
+  await ch.prefetch(10);
+  await ch.consume(queue.queue, async (message: amqp.ConsumeMessage | null) => {
+    if (!message) return;
+    const parsedMessage: any = decode(message.content);
+    const ack = await handler(parsedMessage);
+    if (ack === AckType.Ack) {
+      ch.ack(message);
+      console.log("ack");
     } else if (ack === AckType.NackRequeue) {
       ch.nack(message, false, true);
       console.log("requeue");

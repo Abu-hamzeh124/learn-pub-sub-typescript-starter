@@ -7,20 +7,34 @@ import {
 } from "../internal/routing/routing.js";
 import { PauseKey } from "../internal/routing/routing.js";
 import { getInput, printServerHelp } from "../internal/gamelogic/gamelogic.js";
-import { declareAndBind, SimpleQueueType } from "../internal/pubsub/consume.js";
+import {
+  AckType,
+  SimpleQueueType,
+  subscribeMsgPack,
+} from "../internal/pubsub/consume.js";
+import { writeLog, type GameLog } from "../internal/gamelogic/logs.js";
 
 async function main() {
   const connStr = "amqp://guest:guest@localhost:5672/";
   const conn = await amqp.connect(connStr);
   const ch = await conn.createConfirmChannel();
-  await declareAndBind(
+  await subscribeMsgPack(
     conn,
     ExchangePerilTopic,
     GameLogSlug,
-    GameLogSlug + ".*",
+    `${GameLogSlug}.*`,
     SimpleQueueType.Durable,
+    async (data: GameLog) => {
+      await writeLog(data);
+      process.stdout.write("> ");
+      return AckType.Ack;
+    },
   );
   console.log("Connection is successful!");
+  if (!process.stdin.isTTY) {
+    console.log("Non-interactive mode: skipping command input.");
+    return;
+  }
   printServerHelp();
   process.on("SIGINT", async () => {
     console.log("Shutting down the connection...");
